@@ -49,40 +49,74 @@ const verifyShopifyWebhook = async (req, res, next) => {
 // Handle order cancellation webhook (for subscription cancellations)
 router.post('/orders/cancelled', verifyShopifyWebhook, async (req, res) => {
   try {
-    const { id, customer, line_items, tags } = req.body;
+    const { id } = req.body;
     
-    // Check if this order is related to a subscription (by checking tags)
-    const isSubscription = tags && Array.isArray(tags) && 
-      tags.some(tag => tag.toLowerCase().includes('subscription'));
+    console.log(`Processing order cancellation for order ${id}`);
     
-    if (!isSubscription) {
-      console.log(`Order ${id} cancelled but not a subscription, skipping LearnWorlds unenrollment`);
-      return res.status(200).json({ success: true, message: 'Not a subscription order' });
+    // Get the shop domain from the headers
+    const shopDomain = req.headers['x-shopify-shop-domain'];
+    if (!shopDomain) {
+      console.log(`Order cancellation ${id} missing shop domain in headers`);
+      return res.status(200).json({ success: true, message: 'Missing shop domain' });
     }
     
-    if (!customer || !customer.email || !line_items || !line_items.length) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    console.log(`Processing subscription cancellation for order ${id}, customer ${customer.id}`);
-    
-    // Process each product in the order
-    for (const item of line_items) {
-      const product_id = item.product_id;
-      if (!product_id) continue;
+    try {
+      // Create a new admin REST client for the shop
+      const restClient = new shopify.clients.Rest({
+        session: {
+          shop: shopDomain,
+          accessToken: process.env.SHOPIFY_API_SECRET // Using API secret as access token for API calls
+        }
+      });
       
-      // Get the corresponding LearnWorlds course ID for this Shopify product
-      const courseId = await getCourseIdForProduct(product_id);
+      // Fetch the order details using the Shopify REST API
+      const response = await restClient.get({
+        path: `orders/${id}`,
+        query: {
+          fields: 'id,customer,line_items,tags'
+        }
+      });
       
-      if (!courseId) {
-        console.log(`No matching course found for product ${product_id}`);
-        continue;
+      const order = response.body.order;
+      
+      if (!order || !order.customer || !order.customer.email || !order.line_items) {
+        console.log(`Could not retrieve complete order details for order ${id}`);
+        return res.status(200).json({ success: true, message: 'Incomplete order details' });
       }
       
-      // Unenroll the customer from the LearnWorlds course
-      await learnWorldsService.unenrollUserFromCourse(customer.email, courseId);
+      // Check if this order is related to a subscription (by checking tags)
+      const isSubscription = order.tags && 
+        order.tags.split(',').some(tag => tag.trim().toLowerCase().includes('subscription'));
       
-      console.log(`Successfully unenrolled customer ${customer.id} from course ${courseId} due to subscription cancellation`);
+      if (!isSubscription) {
+        console.log(`Order ${id} cancelled but not a subscription, skipping LearnWorlds unenrollment`);
+        return res.status(200).json({ success: true, message: 'Not a subscription order' });
+      }
+      
+      console.log(`Processing subscription cancellation for order ${id}, customer ${order.customer.id}`);
+      
+      // Process each product in the order
+      for (const item of order.line_items) {
+        const product_id = item.product_id;
+        if (!product_id) continue;
+        
+        // Get the corresponding LearnWorlds course ID for this Shopify product
+        const courseId = await getCourseIdForProduct(product_id);
+        
+        if (!courseId) {
+          console.log(`No matching course found for product ${product_id}`);
+          continue;
+        }
+        
+        // Unenroll the customer from the LearnWorlds course
+        await learnWorldsService.unenrollUserFromCourse(order.customer.email, courseId);
+        
+        console.log(`Successfully unenrolled customer ${order.customer.id} from course ${courseId} due to subscription cancellation`);
+      }
+      
+    } catch (apiError) {
+      console.error(`Error fetching order details from Shopify API:`, apiError);
+      return res.status(200).json({ success: true, message: 'Error fetching order details' });
     }
     
     res.status(200).json({ success: true });
@@ -95,53 +129,87 @@ router.post('/orders/cancelled', verifyShopifyWebhook, async (req, res) => {
 // Handle order creation webhook (for new subscriptions)
 router.post('/orders/create', verifyShopifyWebhook, async (req, res) => {
   try {
-    const { id, customer, line_items, tags, financial_status } = req.body;
+    const { id } = req.body;
     
-    // Check if this order is related to a subscription (by checking tags)
-    const isSubscription = tags && Array.isArray(tags) && 
-      tags.some(tag => tag.toLowerCase().includes('subscription'));
+    console.log(`Processing order creation for order ${id}`);
     
-    if (!isSubscription) {
-      console.log(`Order ${id} created but not a subscription, skipping LearnWorlds enrollment`);
-      return res.status(200).json({ success: true, message: 'Not a subscription order' });
+    // Get the shop domain from the headers
+    const shopDomain = req.headers['x-shopify-shop-domain'];
+    if (!shopDomain) {
+      console.log(`Order creation ${id} missing shop domain in headers`);
+      return res.status(200).json({ success: true, message: 'Missing shop domain' });
     }
     
-    // Only process paid or authorized orders
-    if (financial_status !== 'paid' && financial_status !== 'authorized') {
-      console.log(`Subscription order ${id} has financial status ${financial_status}, not processing until paid`);
-      return res.status(200).json({ success: true, message: 'Order not paid yet' });
-    }
-    
-    if (!customer || !customer.email || !line_items || !line_items.length) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    console.log(`Processing new subscription for order ${id}, customer ${customer.id}`);
-    
-    // Process each product in the order
-    for (const item of line_items) {
-      const product_id = item.product_id;
-      if (!product_id) continue;
+    try {
+      // Create a new admin REST client for the shop
+      const restClient = new shopify.clients.Rest({
+        session: {
+          shop: shopDomain,
+          accessToken: process.env.SHOPIFY_API_SECRET // Using API secret as access token for API calls
+        }
+      });
       
-      // Get the corresponding LearnWorlds course ID for this Shopify product
-      const courseId = await getCourseIdForProduct(product_id);
+      // Fetch the order details using the Shopify REST API
+      const response = await restClient.get({
+        path: `orders/${id}`,
+        query: {
+          fields: 'id,customer,line_items,tags,financial_status'
+        }
+      });
       
-      if (!courseId) {
-        console.log(`No matching course found for product ${product_id}`);
-        continue;
+      const order = response.body.order;
+      
+      if (!order || !order.customer || !order.customer.email || !order.line_items) {
+        console.log(`Could not retrieve complete order details for order ${id}`);
+        return res.status(200).json({ success: true, message: 'Incomplete order details' });
       }
       
-      // Create user data object for enrollment
-      const userData = {
-        email: customer.email,
-        first_name: customer.first_name || '',
-        last_name: customer.last_name || ''
-      };
+      // Check if this order is related to a subscription (by checking tags)
+      const isSubscription = order.tags && 
+        order.tags.split(',').some(tag => tag.trim().toLowerCase().includes('subscription'));
       
-      // Enroll the customer in the LearnWorlds course
-      await learnWorldsService.enrollUserInCourse(customer.email, courseId, userData);
+      if (!isSubscription) {
+        console.log(`Order ${id} created but not a subscription, skipping LearnWorlds enrollment`);
+        return res.status(200).json({ success: true, message: 'Not a subscription order' });
+      }
       
-      console.log(`Successfully enrolled customer ${customer.id} in course ${courseId} due to new subscription`);
+      // Only process paid or authorized orders
+      if (order.financial_status !== 'paid' && order.financial_status !== 'authorized') {
+        console.log(`Subscription order ${id} has financial status ${order.financial_status}, not processing until paid`);
+        return res.status(200).json({ success: true, message: 'Order not paid yet' });
+      }
+      
+      console.log(`Processing new subscription for order ${id}, customer ${order.customer.id}`);
+      
+      // Process each product in the order
+      for (const item of order.line_items) {
+        const product_id = item.product_id;
+        if (!product_id) continue;
+        
+        // Get the corresponding LearnWorlds course ID for this Shopify product
+        const courseId = await getCourseIdForProduct(product_id);
+        
+        if (!courseId) {
+          console.log(`No matching course found for product ${product_id}`);
+          continue;
+        }
+        
+        // Create user data object for enrollment
+        const userData = {
+          email: order.customer.email,
+          first_name: order.customer.first_name || '',
+          last_name: order.customer.last_name || ''
+        };
+        
+        // Enroll the customer in the LearnWorlds course
+        await learnWorldsService.enrollUserInCourse(order.customer.email, courseId, userData);
+        
+        console.log(`Successfully enrolled customer ${order.customer.id} in course ${courseId} due to new subscription`);
+      }
+      
+    } catch (apiError) {
+      console.error(`Error fetching order details from Shopify API:`, apiError);
+      return res.status(200).json({ success: true, message: 'Error fetching order details' });
     }
     
     res.status(200).json({ success: true });
@@ -154,47 +222,81 @@ router.post('/orders/create', verifyShopifyWebhook, async (req, res) => {
 // Handle order payment webhook (for subscription orders that were pending payment)
 router.post('/orders/paid', verifyShopifyWebhook, async (req, res) => {
   try {
-    const { id, customer, line_items, tags } = req.body;
+    const { id } = req.body;
     
-    // Check if this order is related to a subscription (by checking tags)
-    const isSubscription = tags && Array.isArray(tags) && 
-      tags.some(tag => tag.toLowerCase().includes('subscription'));
+    console.log(`Processing order payment for order ${id}`);
     
-    if (!isSubscription) {
-      console.log(`Order ${id} paid but not a subscription, skipping LearnWorlds enrollment`);
-      return res.status(200).json({ success: true, message: 'Not a subscription order' });
+    // Get the shop domain from the headers
+    const shopDomain = req.headers['x-shopify-shop-domain'];
+    if (!shopDomain) {
+      console.log(`Order payment ${id} missing shop domain in headers`);
+      return res.status(200).json({ success: true, message: 'Missing shop domain' });
     }
     
-    if (!customer || !customer.email || !line_items || !line_items.length) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    console.log(`Processing paid subscription for order ${id}, customer ${customer.id}`);
-    
-    // Process each product in the order
-    for (const item of line_items) {
-      const product_id = item.product_id;
-      if (!product_id) continue;
+    try {
+      // Create a new admin REST client for the shop
+      const restClient = new shopify.clients.Rest({
+        session: {
+          shop: shopDomain,
+          accessToken: process.env.SHOPIFY_API_SECRET // Using API secret as access token for API calls
+        }
+      });
       
-      // Get the corresponding LearnWorlds course ID for this Shopify product
-      const courseId = await getCourseIdForProduct(product_id);
+      // Fetch the order details using the Shopify REST API
+      const response = await restClient.get({
+        path: `orders/${id}`,
+        query: {
+          fields: 'id,customer,line_items,tags,financial_status'
+        }
+      });
       
-      if (!courseId) {
-        console.log(`No matching course found for product ${product_id}`);
-        continue;
+      const order = response.body.order;
+      
+      if (!order || !order.customer || !order.customer.email || !order.line_items) {
+        console.log(`Could not retrieve complete order details for order ${id}`);
+        return res.status(200).json({ success: true, message: 'Incomplete order details' });
       }
       
-      // Create user data object for enrollment
-      const userData = {
-        email: customer.email,
-        first_name: customer.first_name || '',
-        last_name: customer.last_name || ''
-      };
+      // Check if this order is related to a subscription (by checking tags)
+      const isSubscription = order.tags && 
+        order.tags.split(',').some(tag => tag.trim().toLowerCase().includes('subscription'));
       
-      // Enroll the customer in the LearnWorlds course
-      await learnWorldsService.enrollUserInCourse(customer.email, courseId, userData);
+      if (!isSubscription) {
+        console.log(`Order ${id} paid but not a subscription, skipping LearnWorlds enrollment`);
+        return res.status(200).json({ success: true, message: 'Not a subscription order' });
+      }
       
-      console.log(`Successfully enrolled customer ${customer.id} in course ${courseId} due to paid subscription`);
+      console.log(`Processing paid subscription for order ${id}, customer ${order.customer.id}`);
+      
+      // Process each product in the order
+      for (const item of order.line_items) {
+        const product_id = item.product_id;
+        if (!product_id) continue;
+        
+        // Get the corresponding LearnWorlds course ID for this Shopify product
+        const courseId = await getCourseIdForProduct(product_id);
+        
+        if (!courseId) {
+          console.log(`No matching course found for product ${product_id}`);
+          continue;
+        }
+        
+        // Create user data object for enrollment
+        const userData = {
+          email: order.customer.email,
+          first_name: order.customer.first_name || '',
+          last_name: order.customer.last_name || ''
+        };
+        
+        // Enroll the customer in the LearnWorlds course
+        await learnWorldsService.enrollUserInCourse(order.customer.email, courseId, userData);
+        
+        console.log(`Successfully enrolled customer ${order.customer.id} in course ${courseId} due to paid subscription`);
+      }
+      
+    } catch (apiError) {
+      console.error(`Error fetching order details from Shopify API:`, apiError);
+      return res.status(200).json({ success: true, message: 'Error fetching order details' });
     }
     
     res.status(200).json({ success: true });
@@ -204,53 +306,87 @@ router.post('/orders/paid', verifyShopifyWebhook, async (req, res) => {
   }
 });
 
-// Handle refund webhook (for subscription refunds)
+// Handle refund webhook (for subscription cancellations via refund)
 router.post('/refunds/create', verifyShopifyWebhook, async (req, res) => {
   try {
     const { id, order_id } = req.body;
     
     if (!order_id) {
-      return res.status(400).json({ error: 'Missing order_id field' });
+      console.log(`Refund ${id} doesn't include order_id, cannot process`);
+      return res.status(200).json({ success: true, message: 'Missing order_id' });
     }
     
-    // We need to fetch the order details to get customer and line items
-    // For simplicity, we'll assume the order details are included in the webhook
-    // In a real implementation, you might need to fetch the order using the Shopify API
-    const order = req.body.order;
+    console.log(`Processing refund ${id} for order ${order_id}`);
     
-    if (!order || !order.customer || !order.line_items) {
-      console.log(`Refund ${id} for order ${order_id} doesn't include order details, cannot process`);
-      return res.status(200).json({ success: true, message: 'Insufficient order details' });
+    // Get the shop domain from the headers
+    const shopDomain = req.headers['x-shopify-shop-domain'];
+    if (!shopDomain) {
+      console.log(`Refund ${id} missing shop domain in headers`);
+      return res.status(200).json({ success: true, message: 'Missing shop domain' });
     }
     
-    // Check if this order is related to a subscription (by checking tags)
-    const isSubscription = order.tags && Array.isArray(order.tags) && 
-      order.tags.some(tag => tag.toLowerCase().includes('subscription'));
-    
-    if (!isSubscription) {
-      console.log(`Refund for order ${order_id} but not a subscription, skipping LearnWorlds unenrollment`);
-      return res.status(200).json({ success: true, message: 'Not a subscription order' });
-    }
-    
-    console.log(`Processing refund for subscription order ${order_id}`);
-    
-    // Process each product in the order
-    for (const item of order.line_items) {
-      const product_id = item.product_id;
-      if (!product_id) continue;
+    try {
+      // Create a new admin REST client for the shop
+      const restClient = new shopify.clients.Rest({
+        session: {
+          shop: shopDomain,
+          accessToken: process.env.SHOPIFY_API_SECRET // Using API secret as access token for API calls
+        }
+      });
       
-      // Get the corresponding LearnWorlds course ID for this Shopify product
-      const courseId = await getCourseIdForProduct(product_id);
+      // Fetch the order details using the Shopify REST API
+      const orderResponse = await restClient.get({
+        path: `orders/${order_id}`,
+        query: {
+          fields: 'id,customer,line_items,tags'
+        }
+      });
       
-      if (!courseId) {
-        console.log(`No matching course found for product ${product_id}`);
-        continue;
+      const order = orderResponse.body.order;
+      
+      if (!order) {
+        console.log(`Could not retrieve order details for order ${order_id}`);
+        return res.status(200).json({ success: true, message: 'Could not retrieve order details' });
       }
       
-      // Unenroll the customer from the LearnWorlds course
-      await learnWorldsService.unenrollUserFromCourse(order.customer.email, courseId);
+      if (!order.customer || !order.customer.email || !order.line_items || !order.line_items.length) {
+        console.log(`Order ${order_id} missing required customer or line item details`);
+        return res.status(200).json({ success: true, message: 'Missing required fields in order' });
+      }
       
-      console.log(`Successfully unenrolled customer ${order.customer.id} from course ${courseId} due to subscription refund`);
+      // Check if this order is related to a subscription (by checking tags)
+      const isSubscription = order.tags && 
+        order.tags.split(',').some(tag => tag.trim().toLowerCase().includes('subscription'));
+      
+      if (!isSubscription) {
+        console.log(`Refund ${id} for order ${order_id} but not a subscription, skipping LearnWorlds unenrollment`);
+        return res.status(200).json({ success: true, message: 'Not a subscription order' });
+      }
+      
+      console.log(`Processing refund ${id} for subscription order ${order_id}, customer ${order.customer.id}`);
+      
+      // Process each product in the order
+      for (const item of order.line_items) {
+        const product_id = item.product_id;
+        if (!product_id) continue;
+        
+        // Get the corresponding LearnWorlds course ID for this Shopify product
+        const courseId = await getCourseIdForProduct(product_id);
+        
+        if (!courseId) {
+          console.log(`No matching course found for product ${product_id}`);
+          continue;
+        }
+        
+        // Unenroll the customer from the LearnWorlds course
+        await learnWorldsService.unenrollUserFromCourse(order.customer.email, courseId);
+        
+        console.log(`Successfully unenrolled customer ${order.customer.id} from course ${courseId} due to refund`);
+      }
+      
+    } catch (apiError) {
+      console.error(`Error fetching order details from Shopify API:`, apiError);
+      return res.status(200).json({ success: true, message: 'Error fetching order details' });
     }
     
     res.status(200).json({ success: true });
