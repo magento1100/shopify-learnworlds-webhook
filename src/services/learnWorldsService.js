@@ -75,6 +75,73 @@ class LearnWorldsService {
       throw new Error(`Failed to unenroll user from course: ${error.message}`);
     }
   }
+
+  /**
+   * Create a user in LearnWorlds if they don't exist
+   * @param {Object} userData - User data including email, first_name, last_name
+   * @returns {Promise<Object>} Created or found user object
+   */
+  async createUserIfNotExists(userData) {
+    try {
+      // First check if user already exists
+      const existingUser = await this.findUserByEmail(userData.email);
+      
+      if (existingUser) {
+        console.log(`User with email ${userData.email} already exists in LearnWorlds`);
+        return existingUser;
+      }
+      
+      // Create the user if they don't exist
+      const response = await axios.post(
+        `${this.baseUrl}/v2/users`,
+        {
+          email: userData.email,
+          first_name: userData.first_name || '',
+          last_name: userData.last_name || ''
+        },
+        { headers: this.getHeaders() }
+      );
+      
+      console.log(`Successfully created user ${userData.email} in LearnWorlds`);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating LearnWorlds user:', error.message);
+      throw new Error(`Failed to create user in LearnWorlds: ${error.message}`);
+    }
+  }
+
+  /**
+   * Enroll a user in a specific course in LearnWorlds
+   * @param {string} userEmail - Email of the user to enroll
+   * @param {string} courseId - ID of the course to enroll in
+   * @param {Object} userData - Optional user data if user needs to be created
+   * @returns {Promise<boolean>} Success status
+   */
+  async enrollUserInCourse(userEmail, courseId, userData = {}) {
+    try {
+      // Ensure the user exists
+      let user = await this.findUserByEmail(userEmail);
+      
+      if (!user) {
+        // Create the user if they don't exist
+        userData.email = userEmail;
+        user = await this.createUserIfNotExists(userData);
+      }
+      
+      // Enroll the user in the course
+      const response = await axios.post(
+        `${this.baseUrl}/v2/users/${user.id}/courses/${courseId}`,
+        {}, // Empty body as we're just creating the enrollment
+        { headers: this.getHeaders() }
+      );
+      
+      console.log(`Successfully enrolled user ${userEmail} in course ${courseId}`);
+      return true;
+    } catch (error) {
+      console.error('Error enrolling user in course:', error.message);
+      throw new Error(`Failed to enroll user in course: ${error.message}`);
+    }
+  }
 }
 
 module.exports = new LearnWorldsService();
