@@ -31,10 +31,12 @@ const shopify = shopifyApi({
 // Import routes
 const webhookRoutes = require('./api/webhooks/routes');
 const authRoutes = require('./api/auth/routes');
+const adminRoutes = require('./api/admin/routes');
 
 // Use routes
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

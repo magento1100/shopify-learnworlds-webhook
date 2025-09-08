@@ -1,5 +1,6 @@
 /**
  * Utility for mapping Shopify products to LearnWorlds courses
+ * Includes support for bundle products and their components
  */
 const fs = require('fs');
 const path = require('path');
@@ -8,6 +9,11 @@ const path = require('path');
 const MAPPING_FILE_PATH = process.env.NODE_ENV === 'production'
   ? '/tmp/product_course_mapping.json'  // Use /tmp in production (Vercel)
   : path.join(__dirname, '../../data/product_course_mapping.json');
+
+// Define the path to the bundle mapping file
+const BUNDLE_MAPPING_FILE_PATH = process.env.NODE_ENV === 'production'
+  ? '/tmp/bundle_product_mapping.json'  // Use /tmp in production (Vercel)
+  : path.join(__dirname, '../../data/bundle_product_mapping.json');
 
 // Ensure the directory exists
 function ensureDirectoryExists() {
@@ -43,8 +49,33 @@ function saveMapping(mapping) {
   }
 }
 
-// Initialize the mapping
+// Load the bundle mapping from file or initialize if it doesn't exist
+function loadBundleMapping() {
+  ensureDirectoryExists();
+  try {
+    if (fs.existsSync(BUNDLE_MAPPING_FILE_PATH)) {
+      const data = fs.readFileSync(BUNDLE_MAPPING_FILE_PATH, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Error loading bundle-product mapping:', error);
+  }
+  return {}; // Return empty mapping if file doesn't exist or there's an error
+}
+
+// Save the bundle mapping to file
+function saveBundleMapping(mapping) {
+  ensureDirectoryExists();
+  try {
+    fs.writeFileSync(BUNDLE_MAPPING_FILE_PATH, JSON.stringify(mapping, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error saving bundle-product mapping:', error);
+  }
+}
+
+// Initialize the mappings
 let productToCourseMap = loadMapping();
+let bundleToComponentsMap = loadBundleMapping();
 
 /**
  * Get the LearnWorlds course ID for a given Shopify product ID
@@ -84,9 +115,51 @@ function getAllMappings() {
   return { ...productToCourseMap };
 }
 
+/**
+ * Get the component product IDs for a bundle product
+ * @param {string} bundleProductId - Shopify bundle product ID
+ * @returns {string[]} Array of component product IDs or empty array if not found
+ */
+function getBundleComponents(bundleProductId) {
+  return bundleToComponentsMap[bundleProductId] || [];
+}
+
+/**
+ * Add or update a bundle-to-components mapping
+ * @param {string} bundleProductId - Shopify bundle product ID
+ * @param {string[]} componentProductIds - Array of component product IDs
+ */
+function setBundleComponents(bundleProductId, componentProductIds) {
+  bundleToComponentsMap[bundleProductId] = componentProductIds;
+  saveBundleMapping(bundleToComponentsMap);
+}
+
+/**
+ * Remove a bundle-to-components mapping
+ * @param {string} bundleProductId - Shopify bundle product ID
+ */
+function removeBundleComponents(bundleProductId) {
+  delete bundleToComponentsMap[bundleProductId];
+  saveBundleMapping(bundleToComponentsMap);
+}
+
+/**
+ * Get all bundle-to-components mappings
+ * @returns {Object} All bundle mappings
+ */
+function getAllBundleMappings() {
+  // Reload from file to ensure we have the latest data
+  bundleToComponentsMap = loadBundleMapping();
+  return { ...bundleToComponentsMap };
+}
+
 module.exports = {
   getCourseIdForProduct,
   setProductCourseMapping,
   removeProductCourseMapping,
-  getAllMappings
+  getAllMappings,
+  getBundleComponents,
+  setBundleComponents,
+  removeBundleComponents,
+  getAllBundleMappings
 };
