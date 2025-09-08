@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "src/index.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "SHOPIFY_API_KEY": "@shopify_api_key",
+    "SHOPIFY_API_SECRET": "@shopify_api_secret",
+    "SHOPIFY_API_SCOPES": "read_products,write_products",
+    "SHOPIFY_API_VERSION": "2023-10",
+    "LEARNWORLDS_API_KEY": "@learnworlds_api_key",
+    "LEARNWORLDS_API_URL": "https://api.learnworlds.com",
+    "LEARNWORLDS_SCHOOL_ID": "@learnworlds_school_id",
+    "HOST": "@vercel_app_url"
+  }
+}
