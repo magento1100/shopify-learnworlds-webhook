@@ -1,6 +1,6 @@
 /**
  * Utility for mapping Shopify products to LearnWorlds courses
- * Includes support for bundle products and their components
+ * Supports direct mapping of all product types including bundle products
  */
 const fs = require('fs');
 const path = require('path');
@@ -79,7 +79,8 @@ let bundleToComponentsMap = loadBundleMapping();
 
 /**
  * Get the LearnWorlds course ID for a given Shopify product ID
- * @param {string} productId - Shopify product ID
+ * Works for all product types including bundle products
+ * @param {string} productId - Shopify product ID (can be a regular product or bundle product)
  * @returns {string|null} LearnWorlds course ID or null if not found
  */
 function getCourseIdForProduct(productId) {
@@ -88,7 +89,8 @@ function getCourseIdForProduct(productId) {
 
 /**
  * Add or update a product-to-course mapping
- * @param {string} productId - Shopify product ID
+ * Works for all product types including bundle products
+ * @param {string} productId - Shopify product ID (can be a regular product or bundle product)
  * @param {string} courseId - LearnWorlds course ID
  */
 function setProductCourseMapping(productId, courseId) {
