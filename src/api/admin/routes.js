@@ -8,7 +8,11 @@ const {
   getBundleComponents,
   setBundleComponents,
   removeBundleComponents,
-  getAllBundleMappings
+  getAllBundleMappings,
+  findBundleCourseIdByName,
+  setBundleNameMapping,
+  removeBundleNameMapping,
+  getAllBundleNameMappings
 } = require('../../utils/productCourseMapping');
 
 // Get all product-to-course mappings
@@ -114,6 +118,72 @@ router.get('/bundles/:bundleProductId', async (req, res) => {
     res.status(200).json({ success: true, bundleProductId, components });
   } catch (error) {
     console.error('Error getting bundle components:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all bundle name-to-course mappings
+router.get('/bundle-names', async (req, res) => {
+  try {
+    const mappings = getAllBundleNameMappings();
+    res.status(200).json({ success: true, mappings });
+  } catch (error) {
+    console.error('Error getting bundle name mappings:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Set a bundle name-to-course mapping
+router.post('/bundle-names', async (req, res) => {
+  try {
+    const { bundleName, courseId } = req.body;
+    
+    if (!bundleName || !courseId) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    setBundleNameMapping(bundleName, courseId);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Error setting bundle name mapping:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete a bundle name-to-course mapping
+router.delete('/bundle-names/:bundleName', async (req, res) => {
+  try {
+    const { bundleName } = req.params;
+    
+    if (!bundleName) {
+      return res.status(400).json({ error: 'Missing bundle name' });
+    }
+    
+    removeBundleNameMapping(bundleName);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Error removing bundle name mapping:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Find a course ID for a bundle by name
+router.get('/bundle-names/find/:bundleName', async (req, res) => {
+  try {
+    const { bundleName } = req.params;
+    
+    if (!bundleName) {
+      return res.status(400).json({ error: 'Missing bundle name' });
+    }
+    
+    const courseId = findBundleCourseIdByName(bundleName);
+    if (courseId) {
+      res.status(200).json({ success: true, bundleName, courseId });
+    } else {
+      res.status(404).json({ success: false, message: 'No course ID found for this bundle name' });
+    }
+  } catch (error) {
+    console.error('Error finding course ID for bundle name:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
