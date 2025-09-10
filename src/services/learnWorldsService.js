@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { getLearnWorldsConfig } = require('../config/learnWorlds');
+const { getCourseIdForProduct } = require('../utils/productCourseMapping');
 
 /**
  * Service for interacting with the LearnWorlds API
@@ -49,10 +50,11 @@ class LearnWorldsService {
   /**
    * Unenroll a user from a specific course in LearnWorlds
    * @param {string} userEmail - Email of the user to unenroll
-   * @param {string} courseId - ID of the course to unenroll from
+   * @param {string} courseId - ID of the course to unenroll from (Shopify product ID)
+   * @param {string} productName - Optional product name for bundle mapping
    * @returns {Promise<boolean>} Success status
    */
-  async unenrollUserFromCourse(userEmail, courseId) {
+  async unenrollUserFromCourse(userEmail, courseId, productName = '') {
     try {
       // First, find the user by email
       const user = await this.findUserByEmail(userEmail);
@@ -62,13 +64,21 @@ class LearnWorldsService {
         return false;
       }
       
+      // Get the LearnWorlds course ID using product mapping
+      const learnWorldsCourseId = await getCourseIdForProduct(courseId, productName);
+      
+      if (!learnWorldsCourseId) {
+        console.warn(`No LearnWorlds course mapping found for product ${courseId} (${productName})`);
+        return false;
+      }
+      
       // Unenroll the user from the course
       const response = await axios.delete(
-        `${this.baseUrl}/v2/users/${user.id}/courses/${courseId}`,
+        `${this.baseUrl}/v2/users/${user.id}/courses/${learnWorldsCourseId}`,
         { headers: this.getHeaders() }
       );
       
-      console.log(`Successfully unenrolled user ${userEmail} from course ${courseId}`);
+      console.log(`Successfully unenrolled user ${userEmail} from LearnWorlds course ${learnWorldsCourseId} (product: ${productName || courseId})`);
       return true;
     } catch (error) {
       console.error('Error unenrolling user from course:', error.message);

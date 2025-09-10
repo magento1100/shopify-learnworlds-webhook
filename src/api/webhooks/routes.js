@@ -111,7 +111,7 @@ router.post('/orders/cancelled', verifyShopifyWebhook, async (req, res) => {
         }
         
         // Unenroll the customer from the LearnWorlds course
-        await learnWorldsService.unenrollUserFromCourse(order.customer.email, courseId);
+        await learnWorldsService.unenrollUserFromCourse(order.customer.email, product_id, product_title);
         
         console.log(`Successfully unenrolled customer ${order.customer.id} from course ${courseId} due to subscription cancellation of product ${product_title}`);
       }
@@ -387,7 +387,7 @@ router.post('/refunds/create', verifyShopifyWebhook, async (req, res) => {
         }
         
         // Unenroll the customer from the LearnWorlds course
-        await learnWorldsService.unenrollUserFromCourse(order.customer.email, courseId);
+        await learnWorldsService.unenrollUserFromCourse(order.customer.email, product_id, product_title);
         
         console.log(`Successfully unenrolled customer ${order.customer.id} from course ${courseId} due to refund of product ${product_title}`);
       }
