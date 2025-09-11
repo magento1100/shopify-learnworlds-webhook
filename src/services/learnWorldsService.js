@@ -61,21 +61,53 @@ class LearnWorldsService {
     try {
       console.log(`Searching for user with email: ${email}`);
       
-      // Try the search endpoint first
-      const response = await axios.get(
-        `${this.baseUrl}/v2/users?email=${encodeURIComponent(email)}`,
-        { headers: this.getHeaders() }
-      );
-
-      console.log(`LearnWorlds API response status: ${response.status}`);
-      console.log(`Found ${response.data ? response.data.length : 0} users`);
-      
-      if (response.data && response.data.length > 0) {
-        console.log(`Found user: ${response.data[0].id} - ${response.data[0].email}`);
-        return response.data[0];
+      // Method 1: Try the search endpoint with email parameter
+      try {
+        console.log('Trying Method 1: GET /v2/users?email=...');
+        const response1 = await axios.get(
+          `${this.baseUrl}/v2/users?email=${encodeURIComponent(email)}`,
+          { headers: this.getHeaders() }
+        );
+        
+        console.log(`Method 1 response status: ${response1.status}`);
+        console.log(`Method 1 found ${response1.data ? response1.data.length : 0} users`);
+        
+        if (response1.data && response1.data.length > 0) {
+          console.log(`Method 1 found user: ${response1.data[0].id} - ${response1.data[0].email}`);
+          return response1.data[0];
+        }
+      } catch (method1Error) {
+        console.log(`Method 1 failed: ${method1Error.response?.status} - ${method1Error.message}`);
       }
       
-      console.log(`No users found with email ${email}`);
+      // Method 2: Try getting all users and filter by email (for small user bases)
+      try {
+        console.log('Trying Method 2: GET /v2/users (all users)');
+        const response2 = await axios.get(
+          `${this.baseUrl}/v2/users?limit=100`,
+          { headers: this.getHeaders() }
+        );
+        
+        console.log(`Method 2 response status: ${response2.status}`);
+        console.log(`Method 2 retrieved ${response2.data ? response2.data.length : 0} users`);
+        
+        if (response2.data && response2.data.length > 0) {
+          const user = response2.data.find(u => u.email && u.email.toLowerCase() === email.toLowerCase());
+          if (user) {
+            console.log(`Method 2 found user: ${user.id} - ${user.email}`);
+            return user;
+          } else {
+            console.log(`Method 2: No user found with email ${email} among ${response2.data.length} users`);
+            // Log first few users for debugging
+            const sampleUsers = response2.data.slice(0, 3).map(u => `${u.id}: ${u.email}`).join(', ');
+            console.log(`Sample users: ${sampleUsers}`);
+          }
+        }
+      } catch (method2Error) {
+        console.log(`Method 2 failed: ${method2Error.response?.status} - ${method2Error.message}`);
+      }
+      
+      console.log(`No users found with email ${email} using any method`);
       return null;
     } catch (error) {
       console.log(`Error details: Status ${error.response?.status}, Message: ${error.message}`);
