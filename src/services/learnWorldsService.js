@@ -42,6 +42,12 @@ class LearnWorldsService {
       
       return null;
     } catch (error) {
+      // If it's a 404 or the user is not found, return null instead of throwing
+      if (error.response && (error.response.status === 404 || error.response.status === 400)) {
+        console.log(`User with email ${email} not found in LearnWorlds (${error.response.status})`);
+        return null;
+      }
+      
       console.error('Error finding LearnWorlds user:', error.message);
       throw new Error(`Failed to find user in LearnWorlds: ${error.message}`);
     }
@@ -60,8 +66,8 @@ class LearnWorldsService {
       const user = await this.findUserByEmail(userEmail);
       
       if (!user) {
-        console.warn(`User with email ${userEmail} not found in LearnWorlds`);
-        return false;
+        console.log(`User with email ${userEmail} not found in LearnWorlds - cannot unenroll (user was likely never enrolled)`);
+        return true; // Return true since the desired state (user not enrolled) is achieved
       }
       
       // Get the LearnWorlds course ID using product mapping
@@ -73,13 +79,22 @@ class LearnWorldsService {
       }
       
       // Unenroll the user from the course
-      const response = await axios.delete(
-        `${this.baseUrl}/v2/users/${user.id}/courses/${learnWorldsCourseId}`,
-        { headers: this.getHeaders() }
-      );
-      
-      console.log(`Successfully unenrolled user ${userEmail} from LearnWorlds course ${learnWorldsCourseId} (product: ${productName || courseId})`);
-      return true;
+      try {
+        const response = await axios.delete(
+          `${this.baseUrl}/v2/users/${user.id}/courses/${learnWorldsCourseId}`,
+          { headers: this.getHeaders() }
+        );
+        
+        console.log(`Successfully unenrolled user ${userEmail} from LearnWorlds course ${learnWorldsCourseId} (product: ${productName || courseId})`);
+        return true;
+      } catch (unenrollError) {
+        // If the user is not enrolled in the course (404), that's also a success state
+        if (unenrollError.response && unenrollError.response.status === 404) {
+          console.log(`User ${userEmail} was not enrolled in course ${learnWorldsCourseId} - unenrollment not needed`);
+          return true;
+        }
+        throw unenrollError;
+      }
     } catch (error) {
       console.error('Error unenrolling user from course:', error.message);
       throw new Error(`Failed to unenroll user from course: ${error.message}`);
