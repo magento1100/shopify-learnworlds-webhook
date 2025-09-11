@@ -11,6 +11,12 @@ class LearnWorldsService {
     this.apiKey = config.apiKey;
     this.baseUrl = config.baseUrl;
     this.schoolId = config.schoolId;
+    
+    // Log configuration for debugging (without exposing sensitive data)
+    console.log(`LearnWorlds Service initialized:`);
+    console.log(`- Base URL: ${this.baseUrl}`);
+    console.log(`- School ID: ${this.schoolId}`);
+    console.log(`- API Key configured: ${this.apiKey ? 'Yes' : 'No'}`);
   }
 
   /**
@@ -25,23 +31,55 @@ class LearnWorldsService {
   }
 
   /**
+   * Test API connection to LearnWorlds
+   * @returns {Promise<boolean>} Connection status
+   */
+  async testConnection() {
+    try {
+      console.log('Testing LearnWorlds API connection...');
+      const response = await axios.get(
+        `${this.baseUrl}/v2/users?limit=1`,
+        { headers: this.getHeaders() }
+      );
+      console.log(`API connection successful. Status: ${response.status}`);
+      return true;
+    } catch (error) {
+      console.error(`API connection failed: ${error.response?.status} - ${error.message}`);
+      if (error.response?.data) {
+        console.error('Error details:', error.response.data);
+      }
+      return false;
+    }
+  }
+
+  /**
    * Find a user in LearnWorlds by email
    * @param {string} email - User's email address
    * @returns {Promise<Object|null>} User object or null if not found
    */
   async findUserByEmail(email) {
     try {
+      console.log(`Searching for user with email: ${email}`);
+      
+      // Try the search endpoint first
       const response = await axios.get(
         `${this.baseUrl}/v2/users?email=${encodeURIComponent(email)}`,
         { headers: this.getHeaders() }
       );
 
+      console.log(`LearnWorlds API response status: ${response.status}`);
+      console.log(`Found ${response.data ? response.data.length : 0} users`);
+      
       if (response.data && response.data.length > 0) {
+        console.log(`Found user: ${response.data[0].id} - ${response.data[0].email}`);
         return response.data[0];
       }
       
+      console.log(`No users found with email ${email}`);
       return null;
     } catch (error) {
+      console.log(`Error details: Status ${error.response?.status}, Message: ${error.message}`);
+      
       // If it's a 404 or the user is not found, return null instead of throwing
       if (error.response && (error.response.status === 404 || error.response.status === 400)) {
         console.log(`User with email ${email} not found in LearnWorlds (${error.response.status})`);
@@ -62,13 +100,28 @@ class LearnWorldsService {
    */
   async unenrollUserFromCourse(userEmail, courseId, productName = '') {
     try {
+      console.log(`Starting unenrollment process for ${userEmail} from product ${courseId} (${productName})`);
+      
       // First, find the user by email
       const user = await this.findUserByEmail(userEmail);
       
       if (!user) {
         console.log(`User with email ${userEmail} not found in LearnWorlds - cannot unenroll (user was likely never enrolled)`);
+        console.log(`This might indicate: 1) User was never enrolled, 2) Different email used in LearnWorlds, 3) User was manually removed`);
+        
+        // Test API connection to help diagnose the issue
+        console.log('Testing API connection to verify LearnWorlds accessibility...');
+        const connectionOk = await this.testConnection();
+        if (!connectionOk) {
+          console.error('LearnWorlds API connection failed - this may explain why the user was not found');
+        } else {
+          console.log('LearnWorlds API connection is working - user genuinely not found');
+        }
+        
         return true; // Return true since the desired state (user not enrolled) is achieved
       }
+      
+      console.log(`Found user in LearnWorlds: ${user.id} - ${user.email}`);
       
       // Get the LearnWorlds course ID using product mapping
       const learnWorldsCourseId = await getCourseIdForProduct(courseId, productName);
