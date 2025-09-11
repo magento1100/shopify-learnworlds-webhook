@@ -123,11 +123,12 @@ class LearnWorldsService {
   /**
    * Enroll a user in a specific course in LearnWorlds
    * @param {string} userEmail - Email of the user to enroll
-   * @param {string} courseId - ID of the course to enroll in
+   * @param {string} courseId - ID of the course to enroll in (Shopify product ID)
    * @param {Object} userData - Optional user data if user needs to be created
+   * @param {string} productName - Optional product name for bundle mapping
    * @returns {Promise<boolean>} Success status
    */
-  async enrollUserInCourse(userEmail, courseId, userData = {}) {
+  async enrollUserInCourse(userEmail, courseId, userData = {}, productName = '') {
     try {
       // Ensure the user exists
       let user = await this.findUserByEmail(userEmail);
@@ -138,14 +139,22 @@ class LearnWorldsService {
         user = await this.createUserIfNotExists(userData);
       }
       
+      // Get the LearnWorlds course ID using product mapping
+      const learnWorldsCourseId = await getCourseIdForProduct(courseId, productName);
+      
+      if (!learnWorldsCourseId) {
+        console.warn(`No LearnWorlds course mapping found for product ${courseId} (${productName})`);
+        return false;
+      }
+      
       // Enroll the user in the course
       const response = await axios.post(
-        `${this.baseUrl}/v2/users/${user.id}/courses/${courseId}`,
+        `${this.baseUrl}/v2/users/${user.id}/courses/${learnWorldsCourseId}`,
         {}, // Empty body as we're just creating the enrollment
         { headers: this.getHeaders() }
       );
       
-      console.log(`Successfully enrolled user ${userEmail} in course ${courseId}`);
+      console.log(`Successfully enrolled user ${userEmail} in LearnWorlds course ${learnWorldsCourseId} (product: ${productName || courseId})`);
       return true;
     } catch (error) {
       console.error('Error enrolling user in course:', error.message);

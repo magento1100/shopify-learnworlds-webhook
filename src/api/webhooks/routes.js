@@ -14,7 +14,6 @@ const shopify = shopifyApi({
   isEmbeddedApp: true
 });
 const learnWorldsService = require('../../services/learnWorldsService');
-const { getCourseIdForProduct } = require('../../utils/productCourseMapping');
 
 // Middleware to verify Shopify webhook
 const verifyShopifyWebhook = async (req, res, next) => {
@@ -101,19 +100,11 @@ router.post('/orders/cancelled', verifyShopifyWebhook, async (req, res) => {
         const product_title = item.title || '';
         if (!product_id) continue;
         
-        // Get the corresponding LearnWorlds course ID for this Shopify product
-        // Pass both product ID and product name to handle bundle products
-        const courseId = await getCourseIdForProduct(product_id, product_title);
-        
-        if (!courseId) {
-          console.log(`No matching course found for product ${product_id} (${product_title})`);
-          continue;
-        }
-        
         // Unenroll the customer from the LearnWorlds course
+        // Pass both product ID and product name to handle bundle products
         await learnWorldsService.unenrollUserFromCourse(order.customer.email, product_id, product_title);
         
-        console.log(`Successfully unenrolled customer ${order.customer.id} from course ${courseId} due to subscription cancellation of product ${product_title}`);
+        console.log(`Successfully unenrolled customer ${order.customer.id} from LearnWorlds course due to subscription cancellation of product ${product_title}`);
       }
       
     } catch (apiError) {
@@ -196,19 +187,11 @@ router.post('/orders/create', verifyShopifyWebhook, async (req, res) => {
           last_name: order.customer.last_name || ''
         };
         
-        // Get the corresponding LearnWorlds course ID for this Shopify product
-        // Pass both product ID and product name to handle bundle products
-        const courseId = await getCourseIdForProduct(product_id, product_title);
-        
-        if (!courseId) {
-          console.log(`No matching course found for product ${product_id} (${product_title})`);
-          continue;
-        }
-        
         // Enroll the customer in the LearnWorlds course
-        await learnWorldsService.enrollUserInCourse(order.customer.email, courseId, userData);
+        // Pass both product ID and product name to handle bundle products
+        await learnWorldsService.enrollUserInCourse(order.customer.email, product_id, userData, product_title);
         
-        console.log(`Successfully enrolled customer ${order.customer.id} in course ${courseId} due to new subscription for product ${product_title}`);
+        console.log(`Successfully enrolled customer ${order.customer.id} in LearnWorlds course due to new subscription for product ${product_title}`);
       }
       
     } catch (apiError) {
@@ -285,19 +268,11 @@ router.post('/orders/paid', verifyShopifyWebhook, async (req, res) => {
           last_name: order.customer.last_name || ''
         };
         
-        // Get the corresponding LearnWorlds course ID for this Shopify product
-        // Pass both product ID and product name to handle bundle products
-        const courseId = await getCourseIdForProduct(product_id, product_title);
-        
-        if (!courseId) {
-          console.log(`No matching course found for product ${product_id} (${product_title})`);
-          continue;
-        }
-        
         // Enroll the customer in the LearnWorlds course
-        await learnWorldsService.enrollUserInCourse(order.customer.email, courseId, userData);
+        // Pass both product ID and product name to handle bundle products
+        await learnWorldsService.enrollUserInCourse(order.customer.email, product_id, userData, product_title);
         
-        console.log(`Successfully enrolled customer ${order.customer.id} in course ${courseId} due to paid subscription for product ${product_title}`);
+        console.log(`Successfully enrolled customer ${order.customer.id} in LearnWorlds course due to paid subscription for product ${product_title}`);
       }
       
     } catch (apiError) {
@@ -377,19 +352,11 @@ router.post('/refunds/create', verifyShopifyWebhook, async (req, res) => {
         const product_title = item.title || '';
         if (!product_id) continue;
         
-        // Get the corresponding LearnWorlds course ID for this Shopify product
-        // Pass both product ID and product name to handle bundle products
-        const courseId = await getCourseIdForProduct(product_id, product_title);
-        
-        if (!courseId) {
-          console.log(`No matching course found for product ${product_id} (${product_title})`);
-          continue;
-        }
-        
         // Unenroll the customer from the LearnWorlds course
+        // Pass both product ID and product name to handle bundle products
         await learnWorldsService.unenrollUserFromCourse(order.customer.email, product_id, product_title);
         
-        console.log(`Successfully unenrolled customer ${order.customer.id} from course ${courseId} due to refund of product ${product_title}`);
+        console.log(`Successfully unenrolled customer ${order.customer.id} from LearnWorlds course due to refund of product ${product_title}`);
       }
       
     } catch (apiError) {
