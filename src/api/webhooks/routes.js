@@ -371,6 +371,80 @@ router.post('/refunds/create', verifyShopifyWebhook, async (req, res) => {
   }
 });
 
+// Handle order update webhook (for subscription status changes)
+router.post('/orders/updated', verifyShopifyWebhook, async (req, res) => {
+  try {
+    const { id, cancelled_at, tags } = req.body;
+    
+    // Check if this is a subscription order
+    const isSubscription = tags && 
+      tags.split(',').some(tag => tag.trim().toLowerCase().includes('subscription'));
+    
+    // If not a subscription or not cancelled, ignore
+    if (!isSubscription || !cancelled_at) {
+      return res.status(200).json({ success: true, message: 'Not a cancelled subscription' });
+    }
+    
+    console.log(`Processing subscription status change for order ${id}`);
+    
+    // Get the shop domain from the headers
+    const shopDomain = req.headers['x-shopify-shop-domain'];
+    if (!shopDomain) {
+      console.log(`Order update ${id} missing shop domain in headers`);
+      return res.status(200).json({ success: true, message: 'Missing shop domain' });
+    }
+    
+    try {
+      // Create a new admin REST client for the shop
+      const restClient = new shopify.clients.Rest({
+        session: {
+          shop: shopDomain,
+          accessToken: process.env.SHOPIFY_API_SECRET // Using API secret as access token for API calls
+        }
+      });
+      
+      // Fetch the order details using the Shopify REST API
+      const response = await restClient.get({
+        path: `orders/${id}`,
+        query: {
+          fields: 'id,customer,line_items,tags,status'
+        }
+      });
+      
+      const order = response.body.order;
+      
+      if (!order || !order.customer || !order.customer.email || !order.line_items) {
+        console.log(`Could not retrieve complete order details for order ${id}`);
+        return res.status(200).json({ success: true, message: 'Incomplete order details' });
+      }
+      
+      console.log(`Processing unsubscription for order ${id}, customer ${order.customer.id}`);
+      
+      // Process each product in the order
+      for (const item of order.line_items) {
+        const product_id = item.product_id;
+        const product_title = item.title || '';
+        if (!product_id) continue;
+        
+        // Unenroll the customer from the LearnWorlds course
+        // Pass both product ID and product name to handle bundle products
+        await learnWorldsService.unenrollUserFromCourse(order.customer.email, product_id, product_title);
+        
+        console.log(`Successfully unenrolled customer ${order.customer.id} from LearnWorlds course due to subscription status change of product ${product_title}`);
+      }
+      
+    } catch (apiError) {
+      console.error(`Error fetching order details from Shopify API:`, apiError);
+      return res.status(200).json({ success: true, message: 'Error fetching order details' });
+    }
+    
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Error processing order update webhook:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // No longer need the helper function as we're using the utility module
 
 module.exports = router;
